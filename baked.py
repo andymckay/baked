@@ -9,8 +9,11 @@ from glob import glob
 class Parser(object):
 
     def __init__(self, filename):
-        self.filename = filename
-        self.file = os.path.basename(filename)
+        self.filename = os.path.abspath(filename)
+        self.file = filename
+        cwd = os.getcwd()
+        if self.file.startswith(cwd):
+            self.file = filename[len(cwd):]
         self.order = ('stdlib', 'unknown')
         self.modules = {}
         self.parsed = []
@@ -40,7 +43,6 @@ class Parser(object):
             self.fallback = data['fallback']
             self.from_order = data['from_order']
 
-
     def get_source(self, type, module, name, level):
         # This is a . import.
         if type == 'from' and level > 0:
@@ -57,21 +59,19 @@ class Parser(object):
         self.source = source.split('\n')
 
         for obj in parsed.body:
-            if isinstance(obj, ast.Import):
-                for n in obj.names:
-                    source = self.get_source('import', None, n.name, 0)
-                    self.parsed.append(self.record('import', None,
-                                                   n.name, obj.lineno, source))
+            if isinstance(obj, (ast.Import, ast.ImportFrom)):
+                type = 'import' if isinstance(obj, ast.Import) else 'from'
+                module = getattr(obj, 'module', None)
+                if '#NOQA' in self.source[obj.lineno-1]:
+                    continue
 
-            if isinstance(obj, ast.ImportFrom):
                 for n in obj.names:
-                    source = self.get_source('from', obj.module, n.name,
-                                             obj.level)
-                    self.parsed.append(self.record('from', obj.module,
+                    source = self.get_source(type, module, n.name, 0)
+                    self.parsed.append(self.record(type, module,
                                                    n.name, obj.lineno, source))
 
     def dump(self, rec):
-        return 'line %s: %s' % (rec.number, self.source[rec.number-1])
+        return 'line %s: %s' % (rec.number, self.source[rec.number - 1])
 
     def dumps(self):
         for record in self.parsed:
@@ -87,16 +87,16 @@ class Parser(object):
             # Find out where a module import is in the wrong order.
             key = rec.module or rec.source
             order[key].append(rec.name)
-            sorted_order = sorted(order[key])
+            sorted_order = sorted(order[key], key=str.lower)
             if order[key] != sorted_order:
-                reported.add('%s:%s: "%s" not in order should be: %s' %
+                reported.add('%s:% 3s: "%s" not in order should be: %s' %
                              (self.file, rec.number, rec.name,
                               ', '.join(sorted_order)))
 
             # Find out when the import grouping is in the wrong order.
             if current != rec.source:
                 if self.order.index(rec.source) < self.order.index(current):
-                    reported.add('%s:%s: "%s" should be before "%s"' %
+                    reported.add('%s:% 3s: "%s" should be before "%s"' %
                                  (self.file, rec.number, rec.source, current))
                     continue
                 current = rec.source
@@ -105,9 +105,10 @@ class Parser(object):
             if rec.type == 'from':
                 current_from = True
 
-            if (rec.type == 'import' and current_from == True
+            if (rec.type == 'import'
+                and current_from is True
                 and self.from_order.get(rec.source, True)):
-                reported.add('%s:%s: "%s" from after import' %
+                reported.add('%s:% 3s: "%s" from after import' %
                              (self.file, rec.number, rec.name))
 
         for report in sorted(reported):
@@ -121,6 +122,5 @@ def main():
             parser.check()
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     main()
-
