@@ -18,15 +18,10 @@ https://gist.github.com/andymckay/5507339
 
 The config file contains:
 
-* *order*: the list of orders of import ``blocks``. This allows you to group
-    your imports into categories.
-* *fallback*: if a category is not found for lib, what should it fall back
-    to, for most this will be ``local``.
-* *from_order*: a dictionary of sections with a boolean value for each
-    section. If the value is false, then baked will not care that an
-    ``import`` came before ``from``. Default is true for each category.
-* *modules*: a dictionary of categories and a list of modules. This allows
-    baked to put each module in the category.
+* *order*: the list of orders of import ``blocks``. This allows you to group your imports into categories.
+* *fallback*: if a category is not found for lib, what should it fall back to, for most this will be ``local``.
+* *from_order*: a dictionary of sections with a boolean value for each section. If the value is false, then baked will not care that an ``import`` came before ``from``. Default is true for each category.
+* *modules*: a dictionary of categories and a list of modules. This allows baked to put each module in the category.
 
 If you'd like to exclude an import from baked add the comment ``#NOQA``.
 
