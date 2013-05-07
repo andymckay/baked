@@ -4,6 +4,7 @@ import os
 import sys
 from collections import defaultdict, namedtuple
 from glob import glob
+from subprocess import PIPE, Popen
 
 
 class Parser(object):
@@ -113,6 +114,48 @@ class Parser(object):
 
         for report in sorted(reported):
             print report
+
+        return len(reported)
+
+
+def git_hook(strict=False, lazy=True):
+    """
+    Use to hooking up to a git pre-commit hook.
+
+    Enable by adding the following to your .git/hooks/pre-commit::
+
+        #!/usr/bin/env python
+        import sys
+        from baked import git_hook
+
+        if __name__ == '__main__':
+            sys.exit(git_hook(strict=True, lazy=True))
+
+    Don't forget to `chmod 755 .git/hooks/pre-commit`.
+
+    :param bool strict: (optional), if True, this returns the total number of
+    errors which will cause the hook to fail
+    :param bool lazy: (optional), allows for the instances where you don't add
+    the files to the index before running a commit, e.g., git commit -a
+
+    :returns: total number of errors if strict is True, otherwise 0
+    """
+    gitcmd = "git diff-index --cached --name-only --diff-filter=ACMRTUXB HEAD"
+    if lazy:
+        # Catch all files, including those not added to the index.
+        gitcmd = gitcmd.replace('--cached ', '')
+
+    # Returns the exit code, list of files modified, list of error messages.
+    p = Popen(gitcmd.split(), stdout=PIPE, stderr=PIPE)
+    (stdout, stderr) = p.communicate()
+    files_modified = [line.strip() for line in stdout.splitlines()]
+
+    # Run the checks
+    errors = 0
+    for file in files_modified:
+        errors += Parser(file).check()
+
+    return errors if strict else 0
 
 
 def main():
