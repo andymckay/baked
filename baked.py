@@ -118,7 +118,7 @@ class Parser(object):
 def main():
     for arg in sys.argv[1:]:
         for file in glob(arg):
-            parser = Parser(arg)
+            parser = Parser(file)
             parser.check()
 
 
