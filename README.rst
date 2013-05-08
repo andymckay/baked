@@ -7,7 +7,11 @@ Filename can be a glob. Or multiple filenames. For example::
 
     baked.py apps/*.py mkt/*.py
 
-Loads a confg file as JSON. It will look in the following places for the file:
+Baked will also accept files being piped to it, for example::
+
+    git diff-index HEAD^ --name-only | baked
+
+Baked loads a confg file as JSON. It will look in the following places for the file:
 
 * the current directory for ``.baked``
 * the users profile directory for ``.baked``
