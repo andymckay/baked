@@ -1,4 +1,6 @@
 import ast
+import imp
+import inspect
 import json
 import os
 import sys
@@ -145,12 +147,11 @@ def git_hook(strict=False, lazy=True):
         # Catch all files, including those not added to the index.
         gitcmd = gitcmd.replace('--cached ', '')
 
-    # Returns the exit code, list of files modified, list of error messages.
     p = Popen(gitcmd.split(), stdout=PIPE, stderr=PIPE)
     (stdout, stderr) = p.communicate()
     files_modified = [line.strip() for line in stdout.splitlines()]
 
-    # Run the checks
+    # Run the checks.
     errors = 0
     for file in files_modified:
         errors += Parser(file).check()
@@ -159,10 +160,26 @@ def git_hook(strict=False, lazy=True):
 
 
 def main():
-    for arg in sys.argv[1:]:
-        for file in glob(arg):
-            parser = Parser(file)
-            parser.check()
+    if sys.argv[1:]:
+        args = []
+        for arg in sys.argv[1:]:
+            for f in glob(arg):
+                args.append(f)
+    else:
+        # Try to find files piped to us.
+        args = [f for f in sys.stdin.readlines()]
+
+    # Remove any non-Python files.
+    py_args = []
+    for f in args:
+        f = f.strip()
+        mod = inspect.getmoduleinfo(f)
+        if mod and mod[3] in (imp.PY_SOURCE,):
+            py_args.append(f)
+
+    for arg in py_args:
+        parser = Parser(arg)
+        parser.check()
 
 
 if __name__ == '__main__':
