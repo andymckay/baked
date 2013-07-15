@@ -45,7 +45,7 @@ class Parser(object):
             self.file = filename[len(cwd):]
         self.order = ('stdlib', 'unknown')
         self.modules = {}
-        [self.modules.__setitem__('stdlib', k) for k in stdlib]
+        [self.modules.__setitem__(k, 'stdlib') for k in stdlib]
         self.parsed = []
         self.fallback = 'unknown'
         self.record = namedtuple('Tree', ('type', 'module', 'name', 'number',
