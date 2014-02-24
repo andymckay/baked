@@ -109,6 +109,7 @@ class Parser(object):
 
     def check(self):
         reported = set()
+        last = {}
         current = self.order[0]
         current_from = False
         order = defaultdict(list)
@@ -128,7 +129,12 @@ class Parser(object):
                 if self.order.index(rec.source) < self.order.index(current):
                     reported.add('%s:% 3s: "%s" should be before "%s"' %
                                  (self.file, rec.number, rec.source, current))
+                    if current in last:
+                        _last = last[current]
+                        reported.add('%s:% 3s: first %s import was "%s"' % (
+                            self.file, _last.number, current, _last.module))
                     continue
+                last[rec.source] = rec
                 current = rec.source
                 current_from = False
 
