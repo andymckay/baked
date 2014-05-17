@@ -76,7 +76,7 @@ class Parser(object):
 
     def get_source(self, type_, module, name, level):
         # This is a . import.
-        if type_ == 'from' and level > 0:
+        if type_ and level > 0:
             return 'local'
         target = (name if module is None else module).split('.')[0]
         result = self.modules.get(target)
@@ -88,12 +88,14 @@ class Parser(object):
         source = open(self.filename, 'rb').read()
         counter = 0
         self.source = source.split('\n')
+        self.start = 0
         self.end = 0
         stop_flag = False
+        start_flag = True
 
         for x in range(0, len(self.source)):
             if stop_flag:
-                self.end = x + 1
+                self.end = x
                 break
 
             for x in range(1, 100):
@@ -110,8 +112,9 @@ class Parser(object):
                 break
 
             for obj in ast.iter_child_nodes(node):
+                start_flag = False
                 if isinstance(obj, (ast.Import, ast.ImportFrom)):
-                    type = 'import' if isinstance(obj, ast.Import) else 'from'
+                    type = 0 if isinstance(obj, ast.Import) else 1
                     module = getattr(obj, 'module', None)
 
                     names = [x.name for x in obj.names]
@@ -120,18 +123,18 @@ class Parser(object):
                     if len(set(sources)) > 1:
                         raise ValueError('Multiple sources on one line.')
 
-                    data = {
-                        'type': type,
-                        'module': module,
-                        'names': names,
-                        'source': sources[0],
-                        'start': start,
-                        'end': end
-                    }
-                    self.parsed.append(data)
+                    self.parsed.append({'type': type, 'module': module,
+                                        'names': names, 'source': sources[0],
+                                        'start': start, 'end': end})
                 else:
                     stop_flag = True
                     break
+
+            else:
+                # Ensure any leading comments remain.
+                if start_flag:
+                    self.start += 1
+
 
     def dump(self, rec):
         return 'line %s: %s' % (rec['start'], self.source[rec['start'] - 1])
@@ -148,18 +151,21 @@ class Parser(object):
                 if rec['source'] == module:
                     section.append(rec)
 
-            order = sorted(([0 if r['type'] == 'import' else 1,  # import first
-                            r['module'], r['names']], r) for r in section)
+            order = sorted(
+                ([r['type'],
+                  r['module'].lower() if r['module'] else r['module'],
+                  r['names']], r) for r in section)
 
             for sorting, item in order:
                 out.extend(self.source[item['start']:item['end']])
 
-            if out:
-                out.append('')
 
-        # Ensure that we end with one and only one new line.
-        out = '\n'.join(out).strip() + '\n'
-        result = out + '\n'.join(self.source[self.end:])
+        # Ensure that we end with two new lines.
+        total = self.source[:self.start]
+        total += out
+        total += self.source[self.end:]
+
+        result = '\n'.join(total)
         dest = tempfile.mkstemp(suffix='.py')[1]
         open(dest, 'w').write(result)
         return dest
