@@ -67,8 +67,10 @@ everyone to parse.
 
 Config params:
 
--i change the file in place, but note that it doesn't fix the order
--p print the diff that baked has calculated
+* ``-i`` change the file in place, but note that it doesn't fix the order of
+  imports on the same line, for example: ``from foo import XX, bar`` is raised
+  as a warning, but the order of ``XX`` and ``bar`` is not fixed.
+* ``-p``: print the diff that baked has calculated
 
 Changes
 -------
