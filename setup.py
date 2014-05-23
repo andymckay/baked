@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='baked',
-    version='0.1.4',
+    version='0.2',
     description='Import order detection',
     long_description=open('README.rst').read(),
     author='Andy McKay',

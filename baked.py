@@ -1,16 +1,18 @@
+import argparse
 import ast
 import imp
 import inspect
 import json
 import os
+import shutil
 import sys
-from collections import defaultdict, namedtuple
+import tempfile
 from glob import glob
 from subprocess import PIPE, Popen
 
 stdlib = [
     'abc', 'anydbm', 'argparse', 'array',
-    'asynchat', 'asyncore', 'atexit', 'base64', 'BaseHTTPServer',
+    'asynchat', 'asyncore', 'asyncio', 'atexit', 'base64', 'BaseHTTPServer',
     'bisect', 'bz2', 'calendar', 'cgitb', 'cmd', 'codecs', 'collections',
     'commands', 'compileall', 'ConfigParser', 'contextlib', 'Cookie',
     'copy', 'cPickle', 'cProfile', 'cStringIO', 'csv', 'datetime',
@@ -35,6 +37,7 @@ stdlib = [
 ]
 
 
+
 class Parser(object):
 
     def __init__(self, filename):
@@ -48,13 +51,19 @@ class Parser(object):
         [self.modules.__setitem__(k, 'stdlib') for k in stdlib]
         self.parsed = []
         self.fallback = 'unknown'
-        self.record = namedtuple('Tree', ('type', 'module', 'name', 'number',
-                                          'source'))
-
         self.load_configs()
         self.parse()
 
     def load_configs(self, *configs):
+        abspath = os.path.abspath(os.path.dirname(self.file))
+        splitpath = abspath.split(os.sep)
+        for x in range(0, len(splitpath)-2):
+            dirname = os.path.join(os.sep, *splitpath[1:-(x+1)])
+            config = os.path.join(dirname, '.baked')
+            if os.path.exists(config):
+                configs = configs + (config,)
+                continue
+
         configs = configs + ('.baked', os.path.expanduser('~/.baked'))
         for config in configs:
             if os.path.exists(config):
@@ -73,11 +82,11 @@ class Parser(object):
             self.fallback = data['fallback']
             self.from_order = data['from_order']
 
-    def get_source(self, type, module, name, level):
+    def get_source(self, type_, module, name, level):
         # This is a . import.
-        if type == 'from' and level > 0:
+        if type_ and level > 0:
             return 'local'
-        target = (module or name).split('.')[0]
+        target = (name if module is None else module).split('.')[0]
         result = self.modules.get(target)
         if not result:
             return self.fallback
@@ -85,72 +94,117 @@ class Parser(object):
 
     def parse(self):
         source = open(self.filename, 'rb').read()
-        parsed = ast.parse(source)
+        counter = 0
         self.source = source.split('\n')
+        self.start = 0
+        self.end = 0
+        stop_flag = False
+        start_flag = True
 
-        for obj in parsed.body:
-            if isinstance(obj, (ast.Import, ast.ImportFrom)):
-                type = 'import' if isinstance(obj, ast.Import) else 'from'
-                module = getattr(obj, 'module', None)
-                if '#NOQA' in self.source[obj.lineno-1]:
+        for x in range(0, len(self.source)):
+            if stop_flag:
+                break
+
+            for x in range(1, 100):
+                code = '\n'.join(self.source[counter:counter+x])
+                if '#NOQA' in code:
+                    break
+                try:
+                    node = ast.parse(code)
+                except (SyntaxError, IndentationError):
                     continue
+                start = counter
+                end = counter + x
+                counter = end
+                break
 
-                for n in obj.names:
-                    source = self.get_source(type, module, n.name, 0)
-                    self.parsed.append(self.record(type, module,
-                                                   n.name, obj.lineno, source))
+            for obj in ast.iter_child_nodes(node):
+                start_flag = False
+                if isinstance(obj, (ast.Import, ast.ImportFrom)):
+                    type = 0 if isinstance(obj, ast.Import) else 1
+                    module = getattr(obj, 'module', None)
+
+                    names = [x.name for x in obj.names]
+                    sources = [self.get_source(type, module, n, 0)
+                               for n in names]
+                    if len(set(sources)) > 1:
+                        raise ValueError('Multiple sources on one line.')
+
+                    self.parsed.append({'type': type, 'module': module,
+                                        'names': names, 'source': sources[0],
+                                        'start': start, 'end': end})
+                    self.end = end
+                else:
+                    stop_flag = True
+                    break
+
+            else:
+                # Ensure any leading comments remain.
+                if start_flag:
+                    self.start += 1
+
 
     def dump(self, rec):
-        return 'line %s: %s' % (rec.number, self.source[rec.number - 1])
+        return 'line %s: %s' % (rec['start'], self.source[rec['start'] - 1])
 
     def dumps(self):
         for record in self.parsed:
             print self.dump(record)
 
+    def diff(self):
+        out = []
+        for module in self.order:
+            section = []
+            for rec in self.parsed:
+                if rec['source'] == module:
+                    section.append(rec)
+
+            order = []
+            for r in section:
+                if sorted(r['names']) != r['names']:
+                    print '{0}:{1}: order wrong for {2}'.format(
+                        self.file, r['start'], ', '.join(r['names']))
+
+                order.append(([r['type'],
+                  r['module'].lower() if r['module'] else r['module'],
+                  r['names']], r))
+
+            # If an import came before and one comes after, add in a newline.
+            if out and order:
+                out.append('')
+
+            order = sorted(order)
+            for sorting, item in order:
+                out.extend(self.source[item['start']:item['end']])
+
+        total = self.source[:self.start]
+        total += out
+        total += self.source[self.end:]
+
+        result = '\n'.join(total)
+        dest = tempfile.mkstemp(suffix='.py')[1]
+        open(dest, 'w').write(result)
+        return dest
+
+    def inplace(self):
+        dest = self.diff()
+        shutil.copy(dest, self.filename)
+        os.remove(dest)
+
+    def get_diff(self):
+        dest = self.diff()
+        diff = 'diff {0} {1} -u'.format(self.filename, dest)
+        p = Popen(diff.split(), stdout=PIPE, stderr=PIPE)
+        (stdout, stderr) = p.communicate()
+        return dest, stdout
+
+    def show(self):
+        print self.get_diff()[1]
+
     def check(self):
-        reported = set()
-        last = {}
-        current = self.order[0]
-        current_from = False
-        order = defaultdict(list)
-
-        for rec in self.parsed:
-            # Find out where a module import is in the wrong order.
-            key = rec.module or rec.source
-            order[key].append(rec.name)
-            sorted_order = sorted(order[key], key=str.lower)
-            if order[key] != sorted_order:
-                reported.add('%s:% 3s: "%s" not in order should be: %s' %
-                             (self.file, rec.number, rec.name,
-                              ', '.join(sorted_order)))
-
-            # Find out when the import grouping is in the wrong order.
-            if current != rec.source:
-                if self.order.index(rec.source) < self.order.index(current):
-                    reported.add('%s:% 3s: "%s" should be before "%s"' %
-                                 (self.file, rec.number, rec.source, current))
-                    if current in last:
-                        _last = last[current]
-                        reported.add('%s:% 3s: first %s import was "%s"' % (
-                            self.file, _last.number, current, _last.module))
-                    continue
-                last[rec.source] = rec
-                current = rec.source
-                current_from = False
-
-            if rec.type == 'from':
-                current_from = True
-
-            if (rec.type == 'import'
-                and current_from is True
-                and self.from_order.get(rec.source, True)):
-                reported.add('%s:% 3s: "%s" from after import' %
-                             (self.file, rec.number, rec.name))
-
-        for report in sorted(reported):
-            print report
-
-        return len(reported)
+        dest, stdout = self.get_diff()
+        if stdout:
+            print '{0}: has import fixes: {1}'.format(self.file, dest)
 
 
 def git_hook(strict=False, lazy=True):
@@ -193,26 +247,38 @@ def git_hook(strict=False, lazy=True):
 
 
 def main():
-    if sys.argv[1:]:
-        args = []
-        for arg in sys.argv[1:]:
-            for f in glob(arg):
-                args.append(f)
-    else:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', help='Changes file in place', const=True,
+                        action='store_const')
+    parser.add_argument('-p', help='Prints changes', const=True,
+                        action='store_const')
+    parser.add_argument('files', nargs='*')
+    args = parser.parse_args()
+    files = []
+
+    for arg in args.files:
+        for f in glob(arg):
+            files.append(f)
+    if not args.files:
         # Try to find files piped to us.
-        args = [f for f in sys.stdin.readlines()]
+        files = [f for f in sys.stdin.readlines()]
 
     # Remove any non-Python files.
-    py_args = []
-    for f in args:
+    py_files = []
+    for f in files:
         f = f.strip()
         mod = inspect.getmoduleinfo(f)
         if mod and mod[3] in (imp.PY_SOURCE,):
-            py_args.append(f)
+            py_files.append(f)
 
-    for arg in py_args:
+    for arg in py_files:
         parser = Parser(arg)
-        parser.check()
+        if args.i:
+            parser.inplace()
+        elif args.p:
+            parser.show()
+        else:
+            parser.check()
 
 
 if __name__ == '__main__':
