@@ -1,5 +1,31 @@
 A script to detect that the import order matches Mozilla WebDev Python
-guidelines. Usage::
+guidelines.
+
+Example::
+
+    [baked] zamboni $ p ~/sandboxes/baked/baked.py lib/video/ffmpeg.py -p
+    lib/video/ffmpeg.py:9: order wrong for check_output, subprocess, VideoBase
+    --- /Users/andy/sandboxes/zamboni/lib/video/ffmpeg.py	2014-05-23 16:11:56.000000000 -0700
+    +++ /var/folders/15/3crpnr7j4sj75xynpsqkqbr00000gp/T/tmpXvc_Ml.py	2014-05-23 16:12:11.000000000 -0700
+    @@ -1,14 +1,14 @@
+     import logging
+    +import logging
+     import re
+     import tempfile
+
+     from django.conf import settings
+
+    +from django_statsd.clients import statsd
+     from tower import ugettext as _
+
+    -from django_statsd.clients import statsd
+     from .utils import check_output, subprocess, VideoBase
+    -import logging
+
+Notice that it detected that `logging` should be up at the top and
+`django_statsd` with the 3rd party imports.
+
+Usage::
 
     baked.py [filename] [filename..]
 
@@ -13,6 +39,8 @@ Baked will also accept files being piped to it, for example::
 
 Baked loads a confg file as JSON. It will look in the following places for the file:
 
+* in the current and parent directories of the file being checked for
+  ``.baked``
 * the current directory for ``.baked``
 * the users profile directory for ``.baked``
 
@@ -36,3 +64,16 @@ http://mozweb.readthedocs.org/en/latest/coding.html#import-statements
 With one exception, we ignore that imports should be ordered ``CONSTANT``,
 ``Class``, ``var``. Just sort by alpha, case insensitive. That's easier for
 everyone to parse.
+
+Config params:
+
+-i change the file in place, but note that it doesn't fix the order
+-p print the diff that baked has calculated
+
+Changes
+-------
+
+0.2: Is a backwards incompatible change, it focuses on generating diffs which
+     is a lot easier to read than some rules. For imports statements on one
+     line which are out of order, it still prints the import order and
+     doesn't try to fix it up.

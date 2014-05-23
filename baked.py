@@ -7,7 +7,6 @@ import os
 import shutil
 import sys
 import tempfile
-from collections import defaultdict
 from glob import glob
 from subprocess import PIPE, Popen
 
@@ -56,6 +55,15 @@ class Parser(object):
         self.parse()
 
     def load_configs(self, *configs):
+        abspath = os.path.abspath(os.path.dirname(self.file))
+        splitpath = abspath.split(os.sep)
+        for x in range(0, len(splitpath)-2):
+            dirname = os.path.join(os.sep, *splitpath[1:-(x+1)])
+            config = os.path.join(dirname, '.baked')
+            if os.path.exists(config):
+                configs = configs + (config,)
+                continue
+
         configs = configs + ('.baked', os.path.expanduser('~/.baked'))
         for config in configs:
             if os.path.exists(config):
@@ -95,7 +103,6 @@ class Parser(object):
 
         for x in range(0, len(self.source)):
             if stop_flag:
-                self.end = x
                 break
 
             for x in range(1, 100):
@@ -126,6 +133,7 @@ class Parser(object):
                     self.parsed.append({'type': type, 'module': module,
                                         'names': names, 'source': sources[0],
                                         'start': start, 'end': end})
+                    self.end = end
                 else:
                     stop_flag = True
                     break
@@ -151,16 +159,24 @@ class Parser(object):
                 if rec['source'] == module:
                     section.append(rec)
 
-            order = sorted(
-                ([r['type'],
-                  r['module'].lower() if r['module'] else r['module'],
-                  r['names']], r) for r in section)
+            order = []
+            for r in section:
+                if sorted(r['names']) != r['names']:
+                    print '{0}:{1}: order wrong for {2}'.format(
+                        self.file, r['start'], ', '.join(r['names']))
 
+                order.append(([r['type'],
+                  r['module'].lower() if r['module'] else r['module'],
+                  r['names']], r))
+
+            # If an import came before and one comes after, add in a newline.
+            if out and order:
+                out.append('')
+
+            order = sorted(order)
             for sorting, item in order:
                 out.extend(self.source[item['start']:item['end']])
 
-
-        # Ensure that we end with two new lines.
         total = self.source[:self.start]
         total += out
         total += self.source[self.end:]
@@ -177,7 +193,7 @@ class Parser(object):
 
     def get_diff(self):
         dest = self.diff()
-        diff = 'diff {0} {1} -u'.format(dest, self.filename)
+        diff = 'diff {0} {1} -u'.format(self.filename, dest)
         p = Popen(diff.split(), stdout=PIPE, stderr=PIPE)
         (stdout, stderr) = p.communicate()
         return dest, stdout
@@ -259,7 +275,7 @@ def main():
         parser = Parser(arg)
         if args.i:
             parser.inplace()
-        if args.p:
+        elif args.p:
             parser.show()
         else:
             parser.check()
