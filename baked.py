@@ -166,8 +166,9 @@ class Parser(object):
                         self.file, r['start'], ', '.join(r['names']))
 
                 order.append(([r['type'],
-                  r['module'].lower() if r['module'] else r['module'],
-                  r['names']], r))
+                    r['module'].lower() if r['module'] else r['module'],
+                    [n.lower() for n in r['names']]
+                  ], r))
 
             # If an import came before and one comes after, add in a newline.
             if out and order:
