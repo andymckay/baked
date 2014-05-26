@@ -75,7 +75,10 @@ Config params:
 Changes
 -------
 
+0.2.1: lower case import names, so ``import StringIO`` comes after ``import
+  os`` for example
+
 0.2: Is a backwards incompatible change, it focuses on generating diffs which
-     is a lot easier to read than some rules. For imports statements on one
-     line which are out of order, it still prints the import order and
-     doesn't try to fix it up.
+  is a lot easier to read than some rules. For imports statements on one
+  line which are out of order, it still prints the import order and
+  doesn't try to fix it up.
