@@ -37,7 +37,6 @@ stdlib = [
 ]
 
 
-
 class Parser(object):
 
     def __init__(self, filename):
@@ -163,7 +162,8 @@ class Parser(object):
             for r in section:
                 if sorted(r['names']) != r['names']:
                     print '{0}:{1}: order wrong for {2}'.format(
-                        self.file, r['start'], ', '.join(r['names']))
+                        self.file, r['start'], ', '.join(r['names'])),
+                    print '...should be', ', '.join(sorted(r['names']))
 
                 order.append(([r['type'],
                     r['module'].lower() if r['module'] else r['module'],
