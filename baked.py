@@ -141,6 +141,7 @@ class Parser(object):
                 # Ensure any leading comments remain.
                 if start_flag:
                     self.start += 1
+                    self.end = self.start
 
 
     def dump(self, rec):
@@ -161,7 +162,7 @@ class Parser(object):
             order = []
             for r in section:
                 sorty = sorted(r['names'], key=lambda s: s.lower())
-                if sorted(sorty) != r['names']:
+                if sorty != r['names']:
                     print '{0}:{1}: order wrong for {2}'.format(
                         self.file, r['start'], ', '.join(r['names'])),
                     print '...should be', ', '.join(sorty)
@@ -181,8 +182,9 @@ class Parser(object):
 
         total = self.source[:self.start]
         total += out
-        if self.end:
+        if self.source[self.end:] != ['']:
             total += self.source[self.end:]
+
 
         result = '\n'.join(total)
         dest = tempfile.mkstemp(suffix='.py')[1]
