@@ -160,10 +160,11 @@ class Parser(object):
 
             order = []
             for r in section:
-                if sorted(r['names']) != r['names']:
+                sorty = sorted(r['names'], key=lambda s: s.lower())
+                if sorted(sorty) != r['names']:
                     print '{0}:{1}: order wrong for {2}'.format(
                         self.file, r['start'], ', '.join(r['names'])),
-                    print '...should be', ', '.join(sorted(r['names']))
+                    print '...should be', ', '.join(sorty)
 
                 order.append(([r['type'],
                     r['module'].lower() if r['module'] else r['module'],
@@ -180,7 +181,8 @@ class Parser(object):
 
         total = self.source[:self.start]
         total += out
-        total += self.source[self.end:]
+        if self.end:
+            total += self.source[self.end:]
 
         result = '\n'.join(total)
         dest = tempfile.mkstemp(suffix='.py')[1]
