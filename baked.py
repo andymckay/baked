@@ -18,7 +18,7 @@ stdlib = [
     'copy', 'cPickle', 'cProfile', 'cStringIO', 'csv', 'datetime',
     'dbhash', 'dbm', 'decimal', 'difflib', 'dircache', 'dis', 'doctest',
     'dumbdbm', 'EasyDialogs', 'exceptions', 'filecmp', 'fileinput',
-    'fnmatch', 'fractions', 'functools', 'gc', 'gdbm', 'getopt',
+    'fnmatch', 'fractions', 'functools', 'ftplib', 'gc', 'gdbm', 'getopt',
     'getpass', 'gettext', 'glob', 'grp', 'gzip', 'hashlib', 'heapq',
     'hmac', 'imaplib', 'imp', 'inspect', 'itertools', 'json', 'linecache',
     'locale', 'logging', 'mailbox', 'math', 'mhlib', 'mmap',
@@ -143,7 +143,6 @@ class Parser(object):
                     self.start += 1
                     self.end = self.start
 
-
     def dump(self, rec):
         return 'line %s: %s' % (rec['start'], self.source[rec['start'] - 1])
 
@@ -189,11 +188,18 @@ class Parser(object):
         result = '\n'.join(total)
         dest = tempfile.mkstemp(suffix='.py')[1]
         open(dest, 'w').write(result)
+        shutil.copystat(self.filename, dest)
         return dest
 
     def inplace(self):
         dest = self.diff()
-        shutil.copy(dest, self.filename)
+        try:
+            shutil.copy(dest, self.filename)
+            shutil.copystat(dest, self.filename)
+        except IOError, exc:
+            if exc.errno == 13:
+                print 'Need write permission: {0}'.format(self.filename)
+                sys.exit(13)
         os.remove(dest)
 
     def get_diff(self):
